@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Properties;
 
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.kernel.colors.Color;
@@ -15,7 +16,6 @@ import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfPage;
 import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.canvas.PdfCanvas;
@@ -34,9 +34,11 @@ import com.itextpdf.layout.properties.Leading;
 import com.itextpdf.layout.properties.Property;
 import com.itextpdf.layout.properties.TextAlignment;
 
-
 public class StampWriter {
 
+    private static final String FONT_PATH_PROPERTY = "font.path";
+    private static final String OUTPUT_FILE_PROPERTY = "output.file";
+    private static final String STAMPS_PER_PAGE_PROPERTY = "stamps.per.page";
     private static final Color COLOR = new DeviceRgb(44, 112, 186);
     private static final Border THIN_BORDER = new SolidBorder(COLOR, 1F);
     private static final Border THICK_BORDER = new SolidBorder(COLOR, 2.5F);
@@ -44,56 +46,55 @@ public class StampWriter {
     private static final float PAGE_MARGINS = 15;
     private static final float INTER_STAMP_GAP = 5;
     private static final float WARNING_HEIGHT = 30;
-    private static final int STAMPS_PER_PAGE = 10;
 
     private StampWriter() {
     }
 
-    public static void createStamps(byte[] originalPdfContent) throws IOException {
-        int givenSignaturesNumber = 16; //or any other random number
-        PdfFont font = PdfFontFactory.createFont(StampWriter.class.getResourceAsStream("/PDFForms/calibri.ttf").readAllBytes(), PdfEncodings.IDENTITY_H);
-        ByteArrayInputStream bais = new ByteArrayInputStream(originalPdfContent);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    public static void createStamps(byte[] originalPdfContent, Properties properties) throws IOException {
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(originalPdfContent);
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfFont font = PdfFontFactory.createFont(properties.getProperty(FONT_PATH_PROPERTY), PdfEncodings.IDENTITY_H);
 
-        PdfReader pdfReader = new PdfReader(bais);
-        pdfReader.setUnethicalReading(true);
+            PdfReader pdfReader = new PdfReader(bais);
+            pdfReader.setUnethicalReading(true);
 
-        try (PdfDocument pdf = new PdfDocument(pdfReader, new PdfWriter(baos));
-             Document doc = new Document(pdf)) {
+            try (PdfDocument pdf = new PdfDocument(pdfReader, new PdfWriter(baos));
+                 Document doc = new Document(pdf)) {
 
-            //setting distance between the baselines -> property LEADING
-            //Leading.MULTIPLIED - leading will depend on the font size, affecting the vertical distance between the baselines in accordance with the font size and the bounding box of the text
-            //1 - coefficient that will be multiplied by the font size to determine the final vertical distance between the baselines of adjacent lines of text
-            doc.setProperty(Property.LEADING, new Leading(Leading.MULTIPLIED, 1));
+                //setting distance between the baselines -> property LEADING
+                //Leading.MULTIPLIED - leading will depend on the font size, affecting the vertical distance between the baselines in accordance with the font size and the bounding box of the text
+                //1 - coefficient that will be multiplied by the font size to determine the final vertical distance between the baselines of adjacent lines of text
+                doc.setProperty(Property.LEADING, new Leading(Leading.MULTIPLIED, 1));
 
-            Table commonStamp = createCommonStamp(font);
-            placeStampOnEveryPage(pdf, commonStamp);
+                Table commonStamp = createCommonStamp(font);
+                placeStampOnEveryPage(pdf, commonStamp);
 
-            placeSignatureStampsOnTheLastPage(givenSignaturesNumber, font, pdf, doc);
+                int givenSignaturesNumber = 16; //or any other random signatures number
+                placeSignatureStampsOnTheLastPage(givenSignaturesNumber, font, pdf, doc, properties);
+            }
+
+            Path filePath = Paths.get(properties.getProperty(OUTPUT_FILE_PROPERTY));
+            Files.write(filePath, baos.toByteArray());
         }
-
-        String relativePath = "src/main/resources/stampedFile.pdf";
-        Path filePath = Paths.get(System.getProperty("user.dir"), relativePath);
-        Files.write(filePath, baos.toByteArray());
     }
 
-    private static void placeSignatureStampsOnTheLastPage(int signaturesNumber, PdfFont font, PdfDocument pdf, Document doc) {
+    private static void placeSignatureStampsOnTheLastPage(int signaturesNumber, PdfFont font, PdfDocument pdf, Document doc, Properties properties) {
         int stampPage = pdf.getNumberOfPages();
         Table stampsTable = null;
         int addedSignaturesNumber = 0;
+        int stampsPerPage = Integer.parseInt(properties.getProperty(STAMPS_PER_PAGE_PROPERTY));
 
         do {
-
             //if it's no stamps by now or max stamps per page is reached -> create a new table of stamps
-            if (addedSignaturesNumber % STAMPS_PER_PAGE == 0) {
-                stampPage++; //we want stamps table on extra page
+            if (addedSignaturesNumber % stampsPerPage == 0) {
+                stampPage++;//we want stamps table on extra page
                 stampsTable = createNewStampsTable(font);
             }
 
             stampsTable.addCell(createSignatureCell(addedSignaturesNumber++));
 
             //actually add content on the last page(s) only after reaching max stamps per page
-            if (addedSignaturesNumber % STAMPS_PER_PAGE == 0 || addedSignaturesNumber == signaturesNumber) {
+            if (addedSignaturesNumber % stampsPerPage == 0 || addedSignaturesNumber == signaturesNumber) {
                 LayoutResult result = stampsTable.createRendererSubTree().setParent(doc.getRenderer())
                         .layout(new LayoutContext(new LayoutArea(1, new Rectangle(1000, 1000))));
 
@@ -113,7 +114,7 @@ public class StampWriter {
                 .setFont(font)
                 .setFontSize(FONT_SIZE)
                 .setFontColor(COLOR)
-                .setBorderCollapse(BorderCollapsePropertyValue.SEPARATE)
+                .setBorderCollapse(BorderCollapsePropertyValue.SEPARATE) //for cells to be separated
                 .setHorizontalBorderSpacing(INTER_STAMP_GAP)
                 .setVerticalBorderSpacing(INTER_STAMP_GAP);
     }
@@ -127,15 +128,13 @@ public class StampWriter {
                 .setFont(font)
                 .setFontSize(FONT_SIZE)
                 .setFontColor(COLOR)
-                .setBold()
-                .setPadding(5);
+                .setBold();
     }
 
     private static void placeStampOnEveryPage(PdfDocument pdf, Table commonStamp) {
         pdf.addEventHandler(PdfDocumentEvent.END_PAGE, evt -> {
             PdfDocumentEvent docEvent = (PdfDocumentEvent) evt;
-            PdfPage page = docEvent.getPage();
-            PdfCanvas pdfCanvas = new PdfCanvas(page.newContentStreamAfter(), page.getResources(), docEvent.getDocument());
+            PdfCanvas pdfCanvas = new PdfCanvas(docEvent.getPage().newContentStreamAfter(), docEvent.getPage().getResources(), docEvent.getDocument());
             Canvas canvas = new Canvas(pdfCanvas, new Rectangle(0, 40));
             canvas.setBackgroundColor(DeviceRgb.GREEN);
             canvas.add(commonStamp);
