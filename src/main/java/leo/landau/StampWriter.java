@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.kernel.colors.Color;
@@ -49,7 +50,7 @@ public class StampWriter {
     }
 
     public static void createStamps(byte[] originalPdfContent) throws IOException {
-        int signaturesNumber = 16;
+        int givenSignaturesNumber = 16; //or any other random number
         PdfFont font = PdfFontFactory.createFont(StampWriter.class.getResourceAsStream("/PDFForms/calibri.ttf").readAllBytes(), PdfEncodings.IDENTITY_H);
         ByteArrayInputStream bais = new ByteArrayInputStream(originalPdfContent);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -68,9 +69,12 @@ public class StampWriter {
             Table commonStamp = createCommonStamp(font);
             placeStampOnEveryPage(pdf, commonStamp);
 
-            placeSignatureStampsOnTheLastPage(signaturesNumber, font, pdf, doc);
+            placeSignatureStampsOnTheLastPage(givenSignaturesNumber, font, pdf, doc);
         }
-        Files.write(Path.of("/Users/ruanaaf/Downloads/github/stampwriter/src/main/resources/aaa.pdf"), baos.toByteArray());
+
+        String relativePath = "src/main/resources/stampedFile.pdf";
+        Path filePath = Paths.get(System.getProperty("user.dir"), relativePath);
+        Files.write(filePath, baos.toByteArray());
     }
 
     private static void placeSignatureStampsOnTheLastPage(int signaturesNumber, PdfFont font, PdfDocument pdf, Document doc) {
