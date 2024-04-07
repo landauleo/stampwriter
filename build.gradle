@@ -20,6 +20,11 @@ dependencies {
     implementation("jakarta.annotation:jakarta.annotation-api")
     implementation("jakarta.validation:jakarta.validation-api")
     runtimeOnly("ch.qos.logback:logback-classic")
+
+    implementation 'com.itextpdf:itextpdf:5.5.13.3'
+    implementation 'com.itextpdf:kernel:8.0.2'
+    implementation 'com.itextpdf:layout:8.0.2'
+
 }
 
 
